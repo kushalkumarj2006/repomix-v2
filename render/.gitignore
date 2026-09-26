@@ -1,0 +1,11 @@
+/server
+/repomix
+*.exe
+.env
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+/dist/
+/tmp/
