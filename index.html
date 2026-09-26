@@ -1,0 +1,1948 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="dark light" />
+<meta name="theme-color" content="#0b1020" />
+<meta name="description" content="Repomix — stream GitHub repositories, local folders, or ZIP archives; select files; export clean text or ZIP." />
+<title>Repomix · Zero-Copy Repository Streamer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E" />
+
+<style>
+:root {
+  --bg-0: #0b1020; --bg-1: #0f172a; --bg-2: #141d33; --bg-3: #1b2544;
+  --border: #26314f; --border-strong: #334155;
+  --text-0: #f1f5f9; --text-1: #cbd5e1; --text-2: #94a3b8; --text-3: #64748b;
+  --accent: #8b5cf6; --accent-2: #6d28d9; --accent-soft: rgba(139, 92, 246, 0.15);
+  --success: #10b981; --success-soft: rgba(16, 185, 129, 0.15);
+  --danger: #ef4444; --danger-soft: rgba(239, 68, 68, 0.15);
+  --warn: #f59e0b;
+  --radius: 14px; --radius-sm: 10px;
+  --shadow: 0 10px 30px rgba(0,0,0,0.35); --shadow-sm: 0 2px 8px rgba(0,0,0,0.25);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --z-sticky: 20;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg-0); color: var(--text-1);
+  font-family: var(--sans); font-size: 16px; line-height: 1.5;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(139, 92, 246, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(59, 130, 246, 0.10), transparent 55%),
+    var(--bg-0);
+  overflow-x: hidden;
+}
+::selection { background: var(--accent-soft); color: var(--text-0); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 2px solid var(--bg-0); }
+
+.app { display: grid; grid-template-rows: auto 1fr auto; min-height: 100dvh; }
+.app-header {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  background: rgba(11, 16, 32, 0.82);
+  border-bottom: 1px solid var(--border);
+}
+.app-header-inner {
+  max-width: 1600px; margin: 0 auto;
+  padding: 14px 20px; display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark {
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  font-size: 22px; flex-shrink: 0; box-shadow: var(--shadow-sm);
+}
+.brand-text { min-width: 0; }
+.brand-title { font-size: 1.15rem; font-weight: 800; color: var(--text-0); margin: 0; line-height: 1.2; }
+.brand-sub { font-size: 0.72rem; color: var(--text-3); margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.conn-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 0.75rem; font-family: var(--mono);
+  border: 1px solid var(--border-strong); background: var(--bg-1);
+  color: var(--text-2); white-space: nowrap;
+}
+.conn-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+.conn-pill[data-state="connected"] { border-color: var(--success); color: var(--success); }
+.conn-pill[data-state="connected"] .dot { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.conn-pill[data-state="connecting"] { border-color: var(--warn); color: var(--warn); }
+.conn-pill[data-state="connecting"] .dot { background: var(--warn); animation: pulse 1.2s infinite; }
+.conn-pill[data-state="error"], .conn-pill[data-state="disconnected"] { border-color: var(--danger); color: var(--danger); }
+.conn-pill[data-state="error"] .dot, .conn-pill[data-state="disconnected"] .dot { background: var(--danger); }
+.conn-pill[data-state="idle"] { border-color: var(--border-strong); color: var(--text-2); }
+.conn-pill[data-state="idle"] .dot { background: var(--text-3); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.app-main {
+  max-width: 1600px; margin: 0 auto; padding: 24px 20px; width: 100%;
+  display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 20px; align-items: start;
+}
+@media (max-width: 1080px) { .app-main { grid-template-columns: 1fr; padding: 16px; } }
+.col-left, .col-right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.card {
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.card-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(0,0,0,0.12);
+}
+.card-title { font-size: 0.9rem; font-weight: 700; color: var(--text-0); margin: 0; display: flex; align-items: center; gap: 8px; }
+.step-badge {
+  display: inline-grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 6px; background: var(--accent-soft); color: var(--accent);
+  font-size: 0.72rem; font-weight: 800; flex-shrink: 0;
+}
+.card-body { padding: 18px; }
+
+.source-tabs {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 6px; padding: 6px; background: var(--bg-0);
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.source-tab {
+  appearance: none; border: 0; background: transparent;
+  color: var(--text-2); padding: 10px 8px; border-radius: 8px;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; min-height: 44px;
+  transition: background .2s, color .2s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.source-tab:hover { color: var(--text-0); background: rgba(255,255,255,0.03); }
+.source-tab[aria-selected="true"] { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; box-shadow: 0 2px 10px rgba(139,92,246,0.35); }
+
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.field-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-1); margin-bottom: 6px; }
+.field-hint { font-size: 0.72rem; color: var(--text-3); margin-top: 6px; line-height: 1.4; }
+.field-hint code { background: var(--bg-0); padding: 1px 6px; border-radius: 4px; font-family: var(--mono); font-size: 0.85em; }
+.input, .textarea {
+  width: 100%; padding: 11px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--bg-0);
+  color: var(--text-0); font-size: 0.9rem; font-family: var(--sans);
+  min-height: 44px;
+}
+.input::placeholder, .textarea::placeholder { color: var(--text-3); }
+.input:focus, .textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.textarea { font-family: var(--mono); font-size: 0.78rem; line-height: 1.55; resize: vertical; min-height: 120px; }
+
+.file-drop {
+  display: block; padding: 22px 18px;
+  border: 2px dashed var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--bg-0); text-align: center; cursor: pointer;
+  min-height: 96px; position: relative;
+}
+.file-drop:hover, .file-drop:focus-within, .file-drop.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.file-drop input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
+.file-drop-label { font-size: 0.9rem; color: var(--text-0); font-weight: 600; pointer-events: none; display: block; margin-bottom: 4px; }
+.file-drop-sub { font-size: 0.72rem; color: var(--text-3); pointer-events: none; display: block; line-height: 1.4; }
+.file-drop.has-file { border-style: solid; border-color: var(--success); background: var(--success-soft); }
+.file-drop.has-file .file-drop-label { color: var(--success); }
+
+.btn {
+  appearance: none; border: 1px solid transparent;
+  border-radius: var(--radius-sm); padding: 11px 16px;
+  font-family: var(--sans); font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; display: inline-flex; align-items: center;
+  justify-content: center; gap: 8px; min-height: 44px;
+  white-space: nowrap; user-select: none; position: relative;
+  transition: filter .15s, transform .12s;
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; box-shadow: 0 2px 10px rgba(139,92,246,0.3); }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-success { background: linear-gradient(135deg, #10b981, #059669); color: white; box-shadow: 0 2px 10px rgba(16,185,129,0.3); }
+.btn-success:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-ghost { background: var(--bg-3); border-color: var(--border); color: var(--text-1); }
+.btn-ghost:hover:not(:disabled) { background: #253152; color: var(--text-0); }
+.btn-outline { background: transparent; border-color: var(--border-strong); color: var(--text-1); }
+.btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--text-0); }
+.btn-danger-ghost { background: transparent; border-color: var(--border); color: var(--text-2); }
+.btn-danger-ghost:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+.btn-block { width: 100%; }
+.btn-sm { padding: 7px 12px; font-size: 0.75rem; min-height: 36px; }
+.btn .ico { font-size: 1rem; line-height: 1; }
+.opts { display: grid; gap: 6px; }
+.opt {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; cursor: pointer;
+  min-height: 44px;
+}
+.opt:hover { background: var(--bg-3); border-color: var(--border); }
+.opt input[type="checkbox"] {
+  appearance: none; width: 20px; height: 20px;
+  border: 2px solid var(--border-strong); border-radius: 6px;
+  background: var(--bg-0); cursor: pointer; flex-shrink: 0;
+  position: relative;
+}
+.opt input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.opt input[type="checkbox"]:checked::after { content: ""; position: absolute; left: 5px; top: 2px; width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.opt-label { font-size: 0.85rem; color: var(--text-1); font-weight: 500; }
+.opt-sub { font-size: 0.72rem; color: var(--text-3); }
+
+.stats-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stat-card { padding: 12px; border-radius: var(--radius-sm); background: var(--bg-0); border: 1px solid var(--border); text-align: center; min-width: 0; }
+.stat-card .stat-val { font-size: 1.3rem; font-weight: 800; color: var(--text-0); font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-card .stat-lbl { font-size: 0.68rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+.stat-card.accent .stat-val { color: var(--accent); }
+.stat-card.success .stat-val { color: var(--success); }
+
+.tree-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.tree-toolbar .selection-summary { margin-left: auto; font-family: var(--mono); font-size: 0.72rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.tree-search { position: relative; flex: 1 1 180px; min-width: 0; max-width: 320px; }
+.tree-search input { padding-left: 34px; font-size: 0.8rem; }
+.tree-search::before { content: "🔎"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; opacity: 0.6; pointer-events: none; z-index: 3; }
+.tree-scroll { max-height: 62dvh; min-height: 240px; overflow: auto; font-family: var(--mono); font-size: 0.78rem; padding: 8px 6px 12px; overscroll-behavior: contain; }
+@media (max-width: 1080px) { .tree-scroll { max-height: 50dvh; } }
+.tree-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font-family: var(--sans); font-size: 0.85rem; }
+.tree-empty .emoji { font-size: 2rem; display: block; margin-bottom: 10px; opacity: .6; }
+.tnode-row { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; cursor: pointer; min-height: 26px; user-select: none; }
+.tnode-row:hover { background: var(--bg-3); }
+.tnode-toggle { width: 18px; height: 18px; display: grid; place-items: center; flex-shrink: 0; color: var(--text-2); font-size: 0.6rem; border-radius: 4px; transition: transform .15s; }
+.tnode-toggle.empty { opacity: 0; pointer-events: none; }
+.tnode-toggle[data-expanded="true"] { transform: rotate(90deg); }
+.tnode-cb { appearance: none; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-radius: 4px; background: var(--bg-0); cursor: pointer; flex-shrink: 0; position: relative; }
+.tnode-cb:checked { background: var(--accent); border-color: var(--accent); }
+.tnode-cb:checked::after { content: ""; position: absolute; left: 3.5px; top: 1px; width: 4px; height: 8px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.tnode-cb:indeterminate { background: var(--accent); border-color: var(--accent); }
+.tnode-cb:indeterminate::after { content: ""; position: absolute; left: 3px; top: 5px; width: 6px; height: 2px; background: white; }
+.tnode-icon { flex-shrink: 0; font-size: 0.85rem; }
+.tnode-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.tnode-row.dir .tnode-name { color: var(--text-0); font-weight: 600; }
+.tnode-size { font-size: 0.66rem; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; margin-left: 8px; flex-shrink: 0; }
+.tnode-status { width: 14px; text-align: center; font-size: 0.7rem; color: var(--success); font-weight: 700; flex-shrink: 0; }
+.tnode-children { margin-left: 14px; border-left: 1px dashed var(--border); padding-left: 6px; }
+.tnode-children.collapsed { display: none; }
+
+.output-area { background: var(--bg-0); border-radius: var(--radius-sm); border: 1px solid var(--border); max-height: 480px; overflow: auto; padding: 14px 16px; font-family: var(--mono); font-size: 0.72rem; line-height: 1.55; color: var(--text-1); white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; margin: 0; }
+.status-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.8rem; border: 1px solid var(--border); background: var(--bg-0); color: var(--text-2); min-height: 44px; }
+.status-bar .sb-icon { flex-shrink: 0; font-size: 1rem; }
+.status-bar .sb-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-bar[data-kind="success"] { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+.status-bar[data-kind="error"]   { border-color: var(--danger);  background: var(--danger-soft);  color: var(--danger); }
+.status-bar[data-kind="warn"]    { border-color: var(--warn);    background: rgba(245,158,11,0.12); color: var(--warn); }
+.progress { width: 100%; height: 4px; border-radius: 2px; background: var(--bg-0); overflow: hidden; margin-top: 8px; display: none; }
+.progress[data-active="true"] { display: block; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #60a5fa); width: 0%; transition: width .25s ease; }
+.progress.indeterminate .progress-fill { width: 40%; animation: indeterminate 1.4s ease-in-out infinite; }
+@keyframes indeterminate { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+
+.app-footer { border-top: 1px solid var(--border); padding: 16px 20px; text-align: center; color: var(--text-3); font-size: 0.72rem; background: rgba(0,0,0,0.2); }
+.app-footer a { color: var(--text-2); text-decoration: none; }
+.app-footer a:hover { color: var(--accent); }
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .card-body { padding: 14px; }
+  .card-header { padding: 12px 14px; }
+  .tree-toolbar { padding: 10px 14px; }
+  .stats-row { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .stat-card .stat-val { font-size: 1.05rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+@media print {
+  .app-header, .app-footer, .btn, .source-tabs, .tree-toolbar, .status-bar, .progress { display: none !important; }
+  body { background: white; color: black; }
+  .card { border: 1px solid #ccc; box-shadow: none; }
+  .output-area { max-height: none; }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">📦</div>
+        <div class="brand-text">
+          <h1 class="brand-title">Repomix</h1>
+          <p class="brand-sub">Zero-copy repository streamer</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="conn-pill" id="connPill" data-state="idle" role="status" aria-live="polite">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="connText">Idle</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="col-left">
+      <section class="card" aria-labelledby="sourceTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="sourceTitle"><span class="step-badge" aria-hidden="true">1</span> Source</h2>
+        </div>
+        <div class="card-body">
+          <div class="source-tabs" role="tablist" aria-label="Repository source">
+            <button class="source-tab" id="tabGithub" role="tab" aria-selected="true" aria-controls="panelGithub" data-source="github" type="button"><span aria-hidden="true">🐙</span> GitHub</button>
+            <button class="source-tab" id="tabLocal" role="tab" aria-selected="false" aria-controls="panelLocal" data-source="local" type="button"><span aria-hidden="true">📁</span> Folder</button>
+            <button class="source-tab" id="tabZip" role="tab" aria-selected="false" aria-controls="panelZip" data-source="zip" type="button"><span aria-hidden="true">🗜️</span> ZIP</button>
+          </div>
+
+          <div id="panelGithub" role="tabpanel" aria-labelledby="tabGithub">
+            <div class="field">
+              <label class="field-label" for="repoUrl">Repository</label>
+              <input class="input" type="text" id="repoUrl" name="repoUrl" placeholder="owner/repo or full GitHub URL"
+                     autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" aria-describedby="repoUrlHint" />
+              <p class="field-hint" id="repoUrlHint">Public repos. Tree is fetched in one request; content streams on demand.</p>
+            </div>
+            <button class="btn btn-primary btn-block" id="analyzeBtn" type="button">
+              <span class="ico" aria-hidden="true">🔍</span><span>Analyze Repository</span>
+            </button>
+          </div>
+
+          <div id="panelLocal" role="tabpanel" aria-labelledby="tabLocal" class="hidden">
+            <div class="field">
+              <label class="field-label" for="folderPicker">Local folder</label>
+              <label class="file-drop" id="folderDrop" for="folderPicker">
+                <input type="file" id="folderPicker" webkitdirectory directory multiple aria-describedby="folderHint" />
+                <span class="file-drop-label" id="folderLabel">📂 Click to select a folder</span>
+                <span class="file-drop-sub">Only the tree is read — contents load on demand</span>
+              </label>
+              <p class="field-hint" id="folderHint">A 5 GB folder is enumerated in under a second. Ignore rules prune before any byte is read.</p>
+            </div>
+            <button class="btn btn-primary btn-block" id="analyzeFolderBtn" type="button">
+              <span class="ico" aria-hidden="true">🔍</span><span>Analyze Folder</span>
+            </button>
+          </div>
+
+          <div id="panelZip" role="tabpanel" aria-labelledby="tabZip" class="hidden">
+            <div class="field">
+              <label class="field-label" for="zipUpload">ZIP archive</label>
+              <label class="file-drop" id="zipDrop" for="zipUpload">
+                <input type="file" id="zipUpload" accept=".zip,application/zip,application/x-zip-compressed" aria-describedby="zipHint" />
+                <span class="file-drop-label" id="zipLabel">🗜️ Click to choose a .zip</span>
+                <span class="file-drop-sub">Only the central directory is parsed — entries extract on demand</span>
+              </label>
+              <p class="field-hint" id="zipHint">Works offline. Multi-GB archives open instantly.</p>
+            </div>
+            <button class="btn btn-primary btn-block" id="analyzeZipBtn" type="button">
+              <span class="ico" aria-hidden="true">🔍</span><span>Analyze ZIP</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="ignoreTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="ignoreTitle"><span class="step-badge" aria-hidden="true">2</span> Ignore rules</h2>
+        </div>
+        <div class="card-body">
+          <div class="field" style="margin-bottom:0">
+            <label class="field-label" for="ignorePatterns">Patterns (one per line)</label>
+            <textarea class="textarea" id="ignorePatterns" name="ignorePatterns" rows="7" spellcheck="false" autocapitalize="off" aria-describedby="ignoreHint"></textarea>
+            <p class="field-hint" id="ignoreHint">Folder names with <code>/</code>, exact filenames, or <code>*</code> wildcards.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="optsTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="optsTitle"><span class="step-badge" aria-hidden="true">3</span> Output options</h2>
+        </div>
+        <div class="card-body">
+          <div class="opts">
+            <label class="opt"><input type="checkbox" id="includeDirectoryStructure" checked /><div><div class="opt-label">Include directory tree</div><div class="opt-sub">Prefix output with an ASCII tree</div></div></label>
+            <label class="opt"><input type="checkbox" id="showLineNumbers" /><div><div class="opt-label">Show line numbers</div><div class="opt-sub">Number lines in the preview</div></div></label>
+            <label class="opt"><input type="checkbox" id="removeComments" /><div><div class="opt-label">Remove comments</div><div class="opt-sub">Strip comments from supported languages</div></div></label>
+            <label class="opt"><input type="checkbox" id="removeEmptyLines" /><div><div class="opt-label">Remove empty lines</div><div class="opt-sub">Compact the exported text</div></div></label>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="col-right">
+      <section class="card" aria-labelledby="statsTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="statsTitle"><span class="step-badge" aria-hidden="true">4</span> Overview</h2>
+          <div style="margin-left:auto">
+            <button class="btn btn-danger-ghost btn-sm" id="resetBtn" type="button" title="Clear selection and reload tree">⟳ Reset</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="stats-row" role="group" aria-label="Repository statistics">
+            <div class="stat-card"><div class="stat-val" id="totalFilesFound">0</div><div class="stat-lbl">Files</div></div>
+            <div class="stat-card success"><div class="stat-val" id="totalSizeFound">0 B</div><div class="stat-lbl">Total Size</div></div>
+            <div class="stat-card accent"><div class="stat-val" id="cachedCount">0</div><div class="stat-lbl">Cached</div></div>
+          </div>
+          <div id="analysisDetails" class="field-hint" style="text-align:center; margin-top:12px" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="treeTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="treeTitle"><span class="step-badge" aria-hidden="true">5</span> Select files</h2>
+        </div>
+        <div class="tree-toolbar">
+          <div class="tree-search">
+            <label class="sr-only" for="treeSearchInput">Search files</label>
+            <input class="input" type="search" id="treeSearchInput" placeholder="Filter paths…" autocomplete="off" spellcheck="false" aria-label="Filter files by path" />
+          </div>
+          <button class="btn btn-ghost btn-sm" id="expandAllBtn" type="button">📂 Expand</button>
+          <button class="btn btn-ghost btn-sm" id="collapseAllBtn" type="button">📁 Collapse</button>
+          <span class="selection-summary" id="selectionStats" aria-live="polite">0 selected</span>
+        </div>
+        <div class="tree-scroll" id="fileTreeContainer" role="tree" aria-label="Repository file tree">
+          <div class="tree-empty"><span class="emoji" aria-hidden="true">🌲</span>Choose a source above and click <strong>Analyze</strong>.</div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="actionsTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="actionsTitle"><span class="step-badge" aria-hidden="true">6</span> Export</h2>
+        </div>
+        <div class="card-body">
+          <div class="row" style="gap:10px">
+            <button class="btn btn-success" id="previewBtn" type="button" style="flex:1" disabled>
+              <span class="ico" aria-hidden="true">📄</span> Preview
+            </button>
+            <button class="btn btn-primary" id="downloadZipBtn" type="button" style="flex:1" disabled>
+              <span class="ico" aria-hidden="true">📦</span> Download ZIP
+            </button>
+          </div>
+          <div class="status-bar" id="statusMsg" data-kind="idle" role="status" aria-live="polite" style="margin-top:12px">
+            <span class="sb-icon" aria-hidden="true">ℹ️</span>
+            <span class="sb-text">Idle — choose a source above.</span>
+          </div>
+          <div class="progress" id="progressBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card hidden" id="outputCard" aria-labelledby="outputTitle">
+        <div class="card-header">
+          <h2 class="card-title" id="outputTitle"><span class="step-badge" aria-hidden="true">✓</span> Preview</h2>
+          <div class="row" style="margin-left:auto; gap:8px">
+            <button class="btn btn-outline btn-sm" id="downloadTextBtn" type="button">💾 Save</button>
+            <button class="btn btn-outline btn-sm" id="copyOutputBtn" type="button">📋 Copy</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding-top:12px">
+          <pre class="output-area" id="output" tabindex="0" aria-label="Generated preview">—</pre>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <span>Repomix · MIT licensed · </span>
+    <a href="https://github.com/kushalkumarj2006/repomix" target="_blank" rel="noopener noreferrer">source</a>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="zip-writer.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const BACKEND_HTTP = 'http://localhost:8080';
+  const BACKEND_WS   = 'ws://localhost:8080/ws';
+
+  const CONFIG = Object.freeze({
+    HEALTH_INTERVAL_MS: 60000,
+    HEALTH_TIMEOUT_MS: 15000,
+    IDB_NAME: 'repomix-cache',
+    IDB_STORE: 'sha-blobs',
+    IDB_VERSION: 1,
+    IDB_TTL_MS: 7 * 24 * 3600 * 1000,
+    SEARCH_DEBOUNCE_MS: 140,
+    STATUS_TIMEOUT_MS: 6000,
+    PREVIEW_BYTES_LIMIT: 25 * 1024 * 1024,
+    WS_OPEN_TIMEOUT_MS: 12000,
+    TREE_WAIT_MS: 60000,
+    FETCH_WAIT_MS: 120000,
+    WS_RECONNECT_BASE_MS: 800,
+    WS_RECONNECT_MAX_MS: 30000
+  });
+
+  const DEFAULT_IGNORE = [
+    'node_modules/', '.git/', '.DS_Store', 'dist/', 'build/', 'coverage/',
+    '*.min.js', '__pycache__/', '.env', '.vscode/', '.idea/',
+    'package-lock.json', 'yarn.lock', '*.log', '*.tmp', '*.zip', '*.tar',
+    '*.gz', '*.jpg', '*.jpeg', '*.png', '*.gif', '*.ico', '*.svg',
+    '*.mp4', '*.webm', '*.mp3', '*.wav', '*.pdf', '*.doc', '*.docx',
+    '*.exe', '*.dll', '*.so', '*.bin', '*.db'
+  ].join('\n');
+
+  const BINARY_EXT = new Set([
+    'png','jpg','jpeg','gif','ico','webp','bmp','tiff',
+    'mp4','webm','mov','avi','mkv','mp3','wav','ogg','flac',
+    'pdf','doc','docx','xls','xlsx','ppt','pptx',
+    'exe','dll','so','dylib','bin','dat','db','sqlite',
+    'zip','tar','gz','bz2','7z','rar','xz',
+    'woff','woff2','ttf','otf','eot',
+    'class','jar','war','pyc','pyo','o','a','lib'
+  ]);
+
+  let DEBUG = (() => {
+    try { return localStorage.getItem('repomix_debug') === '1'; }
+    catch { return false; }
+  })();
+  function log(...args) { if (DEBUG) console.log('%c[repomix]', 'color:#8b5cf6;font-weight:bold', ...args); }
+  function warn(...args) { console.warn('%c[repomix]', 'color:#f59e0b;font-weight:bold', ...args); }
+  function err(...args) { console.error('%c[repomix]', 'color:#ef4444;font-weight:bold', ...args); }
+
+  const $ = id => document.getElementById(id);
+  const dom = {
+    connPill: $('connPill'), connText: $('connText'),
+    tabs: Array.from(document.querySelectorAll('.source-tab')),
+    panelGithub: $('panelGithub'), panelLocal: $('panelLocal'), panelZip: $('panelZip'),
+    repoUrl: $('repoUrl'), analyzeBtn: $('analyzeBtn'),
+    folderPicker: $('folderPicker'), folderDrop: $('folderDrop'), folderLabel: $('folderLabel'),
+    analyzeFolderBtn: $('analyzeFolderBtn'),
+    zipUpload: $('zipUpload'), zipDrop: $('zipDrop'), zipLabel: $('zipLabel'),
+    analyzeZipBtn: $('analyzeZipBtn'),
+    ignorePatterns: $('ignorePatterns'),
+    includeDir: $('includeDirectoryStructure'),
+    showLineNums: $('showLineNumbers'),
+    removeComments: $('removeComments'),
+    removeEmpty: $('removeEmptyLines'),
+    totalFiles: $('totalFilesFound'), totalSize: $('totalSizeFound'),
+    cachedCount: $('cachedCount'), analysisDetails: $('analysisDetails'),
+    treeContainer: $('fileTreeContainer'), treeSearch: $('treeSearchInput'),
+    expandAllBtn: $('expandAllBtn'), collapseAllBtn: $('collapseAllBtn'),
+    selectionStats: $('selectionStats'),
+    resetBtn: $('resetBtn'), previewBtn: $('previewBtn'), downloadZipBtn: $('downloadZipBtn'),
+    statusMsg: $('statusMsg'), progressBar: $('progressBar'), progressFill: $('progressFill'),
+    outputCard: $('outputCard'), output: $('output'),
+    copyBtn: $('copyOutputBtn'), downloadTextBtn: $('downloadTextBtn')
+  };
+
+  const state = {
+    sourceType: 'github',
+    jszipAvailable: false,
+    shaCache: new Map(),
+    pathToSha: new Map(),
+    fileCache: new Map(),
+    selectedPaths: new Set(),
+    chunkBuffers: new Map(),
+    allFiles: [],
+    treeRoot: null,
+    expanded: new Set(),
+    filterQuery: '',
+    localHandles: new Map(),
+    localZipEntries: new Map(),
+    owner: '', repo: '', branch: 'main', repoId: null,
+    ws: null,
+    wsReady: false,
+    wsAttempts: 0,
+    wsReconnectTimer: null,
+    wsOpenPromise: null,
+    wsOpened: false,
+    wsClosed: false,
+    busy: false,
+    currentText: '',
+    previewBuild: null,
+    healthTimer: null,
+    healthFail: 0
+  };
+
+  // ============================================================
+  // SOCKET LAYER (fixed)
+  // ============================================================
+  const frameWaiters = [];
+
+  function openWS() {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN && state.wsReady) {
+      return Promise.resolve(state.ws);
+    }
+    if (state.wsOpenPromise) return state.wsOpenPromise;
+
+    setConn('connecting', 'Connecting…');
+
+    state.wsOpenPromise = new Promise((resolve, reject) => {
+      let ws;
+      try { ws = new WebSocket(BACKEND_WS); }
+      catch (e) {
+        state.wsOpenPromise = null;
+        setConn('error', 'Bad URL');
+        reject(e);
+        return;
+      }
+      state.ws = ws;
+      state.wsClosed = false;
+      let settled = false;
+
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        state.wsOpenPromise = null;
+        try { ws.close(); } catch {}
+        setConn('error', 'Timeout');
+        reject(new Error('WebSocket open timeout'));
+      }, CONFIG.WS_OPEN_TIMEOUT_MS);
+
+      ws.onopen = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        state.wsReady = true;
+        state.wsAttempts = 0;
+        state.wsOpened = true;
+        setConn('connected', 'Connected');
+        log('WS open');
+        resolve(ws);
+      };
+
+      ws.onmessage = (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        log('WS ←', msg.type, frameSummary(msg));
+        for (let i = frameWaiters.length - 1; i >= 0; i--) {
+          const w = frameWaiters[i];
+          if (w.check(msg)) {
+            frameWaiters.splice(i, 1);
+            clearTimeout(w.timer);
+            try { w.resolve(msg); } catch (e) { err('waiter threw', e); }
+          }
+        }
+        handleServerMessage(msg);
+      };
+
+      ws.onclose = (ev) => {
+        log('WS closed', ev.code, ev.reason);
+        state.wsReady = false;
+        state.wsOpenPromise = null;
+        state.wsClosed = true;
+        if (state.ws === ws) state.ws = null;
+        setConn('disconnected', 'Disconnected');
+        if (state.wsOpened) scheduleReconnect();
+      };
+
+      ws.onerror = (ev) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        state.wsOpenPromise = null;
+        state.wsReady = false;
+        err('WS error', ev);
+        setConn('error', 'Connection error');
+        reject(new Error('WebSocket error'));
+      };
+    });
+
+    return state.wsOpenPromise;
+  }
+
+  function scheduleReconnect() {
+    if (state.wsReconnectTimer) clearTimeout(state.wsReconnectTimer);
+    state.wsAttempts++;
+    const delay = Math.min(CONFIG.WS_RECONNECT_MAX_MS,
+      CONFIG.WS_RECONNECT_BASE_MS * Math.pow(2, state.wsAttempts - 1));
+    log('Reconnect in', delay, 'ms');
+    state.wsReconnectTimer = setTimeout(async () => {
+      try {
+        await openWS();
+        if (state.owner && state.repo) {
+          wsSend({ type: 'set-repo', owner: state.owner, repo: state.repo,
+                   branch: state.branch, ignorePatterns: getIgnorePatterns() });
+        }
+      } catch (e) { log('Reconnect failed', e); }
+    }, delay);
+  }
+
+  function wsSend(obj) {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN || !state.wsReady) {
+      throw new Error('socket not open');
+    }
+    state.ws.send(JSON.stringify(obj));
+    log('WS →', obj.type, frameSummary(obj));
+  }
+
+  function waitFor(check, label, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = frameWaiters.findIndex(w => w.timer === timer);
+        if (idx >= 0) frameWaiters.splice(idx, 1);
+        reject(new Error('timeout waiting for ' + label));
+      }, timeoutMs);
+      frameWaiters.push({ check, resolve, reject, timer });
+    });
+  }
+
+  function frameSummary(obj) {
+    if (obj.shas) return `${obj.shas.length} shas`;
+    if (obj.paths) return `${obj.paths.length} paths`;
+    if (obj.type === 'tree') return `${obj.files?.length || 0} files`;
+    if (obj.type === 'file') return `${obj.path?.slice(0,20) || obj.sha?.slice(0,8)} (${obj.size}B)`;
+    if (obj.type === 'fetch-complete') return `req=${obj.requested} sent=${obj.sent} skip=${obj.skipped}`;
+    return '';
+  }
+
+  function handleServerMessage(msg) {
+    switch (msg.type) {
+      case 'ready':
+        state.repoId = msg.repoId;
+        state.branch = msg.defaultBranch || state.branch;
+        break;
+      case 'tree':
+        break;
+      case 'file':
+        onFileReceived(msg.sha, msg.path, msg.content, msg.size);
+        break;
+      case 'file-chunk': {
+        let buf = state.chunkBuffers.get(msg.sha);
+        if (!buf) {
+          buf = { chunks: new Array(msg.total), total: msg.total, path: msg.path, size: msg.size };
+          state.chunkBuffers.set(msg.sha, buf);
+        }
+        buf.chunks[msg.index] = msg.content;
+        if (buf.chunks.every(Boolean)) {
+          state.chunkBuffers.delete(msg.sha);
+          onFileReceived(msg.sha, buf.path || msg.path, buf.chunks.join(''), buf.size || msg.size);
+        }
+        break;
+      }
+      case 'file-skipped':
+        break;
+      case 'fetch-complete':
+        break;
+      case 'error':
+        err('Server error:', msg.message);
+        setStatus('error', msg.message || 'Server error');
+        break;
+      case 'pong': break;
+    }
+  }
+
+  function onFileReceived(sha, path, content, size) {
+    if (!path && sha) {
+      for (const f of state.allFiles) if (f.sha === sha) { path = f.path; break; }
+    }
+    state.shaCache.set(sha, content);
+    if (path) state.fileCache.set(path, content);
+    idbQueueWrite(sha, content);
+    if (state.previewBuild && path && state.previewBuild.order.includes(path) && !state.previewBuild.chunks.has(path)) {
+      state.previewBuild.chunks.set(path, renderSection(path));
+      if (!dom.outputCard.classList.contains('hidden')) {
+        const partial = buildPreviewText();
+        state.currentText = partial;
+        dom.output.textContent = partial;
+      }
+    }
+    updateSelectionStats();
+    if (path) {
+      const row = dom.treeContainer.querySelector(`.tnode-row[data-path="${cssEscape(path)}"]`);
+      const st = row?.querySelector('.tnode-status');
+      if (st) st.textContent = '✓';
+    }
+  }
+
+  // ============================================================
+  // HEALTH
+  // ============================================================
+  async function pingHealth() {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), CONFIG.HEALTH_TIMEOUT_MS);
+    try {
+      const res = await fetch(BACKEND_HTTP + '/health', { method: 'GET', signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(to);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      state.healthFail = 0;
+      if (state.wsReady) setConn('connected', 'Connected');
+      else {
+        const c = data?.clients?.connected ?? 0;
+        const m = data?.clients?.max ?? '?';
+        setConn('idle', `Backend ready · ${c}/${m} clients`);
+      }
+      return data;
+    } catch (e) {
+      clearTimeout(to);
+      state.healthFail++;
+      if (state.healthFail >= 2 && !state.wsReady) setConn('disconnected', 'Backend offline');
+      throw e;
+    }
+  }
+  function startHealthPolling() {
+    pingHealth().catch(() => {});
+    if (state.healthTimer) clearInterval(state.healthTimer);
+    state.healthTimer = setInterval(() => pingHealth().catch(() => {}), CONFIG.HEALTH_INTERVAL_MS);
+  }
+
+  async function testapi() {
+    console.log('%c🔍 /testapi — probing every GitHub token…', 'color:#8b5cf6;font-weight:bold');
+    try {
+      const res = await fetch(BACKEND_HTTP + '/testapi', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      console.log(`%c📊 ${data.tokenCount} token(s) · ${data.healthyTokens} healthy`, 'color:#10b981;font-weight:bold');
+      console.table(data.tokens.map((t, i) => ({ '#': i + 1, token: t.masked, ok: t.ok, remaining: t.remaining, limit: t.limit, resetInMins: t.resetInMins })));
+      return data;
+    } catch (e) {
+      console.error('%c❌ /testapi failed: ' + e.message, 'color:#ef4444;font-weight:bold');
+      return { error: e.message };
+    }
+  }
+
+  // ============================================================
+  // INDEXEDDB
+  // ============================================================
+  let idbPromise = null;
+  function openIDB() {
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) { reject(new Error('no IDB')); return; }
+      try {
+        const req = indexedDB.open(CONFIG.IDB_NAME, CONFIG.IDB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(CONFIG.IDB_STORE)) {
+            const s = db.createObjectStore(CONFIG.IDB_STORE, { keyPath: 'sha' });
+            s.createIndex('storedAt', 'storedAt');
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      } catch (e) { reject(e); }
+    });
+    return idbPromise;
+  }
+  async function idbGetAll() {
+    try {
+      const db = await openIDB();
+      return await new Promise((resolve) => {
+        const out = [];
+        const tx = db.transaction(CONFIG.IDB_STORE, 'readonly');
+        const req = tx.objectStore(CONFIG.IDB_STORE).openCursor();
+        req.onsuccess = () => {
+          const c = req.result;
+          if (c) { out.push(c.value); c.continue(); } else resolve(out);
+        };
+        req.onerror = () => resolve([]);
+      });
+    } catch { return []; }
+  }
+  let idbQueue = [];
+  let idbTimer = null;
+  function idbQueueWrite(sha, content) {
+    idbQueue.push({ sha, content });
+    if (idbTimer) return;
+    idbTimer = setTimeout(async () => {
+      idbTimer = null;
+      const batch = idbQueue; idbQueue = [];
+      if (!batch.length) return;
+      try {
+        const db = await openIDB();
+        await new Promise((resolve) => {
+          const tx = db.transaction(CONFIG.IDB_STORE, 'readwrite');
+          const s = tx.objectStore(CONFIG.IDB_STORE);
+          const now = Date.now();
+          for (const { sha, content } of batch) if (sha && content != null) s.put({ sha, content, storedAt: now });
+          tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+        });
+      } catch {}
+    }, 250);
+  }
+  async function idbClear() {
+    try {
+      const db = await openIDB();
+      await new Promise((resolve) => {
+        const tx = db.transaction(CONFIG.IDB_STORE, 'readwrite');
+        tx.objectStore(CONFIG.IDB_STORE).clear();
+        tx.oncomplete = resolve; tx.onerror = resolve;
+      });
+    } catch {}
+  }
+  async function idbPrune() {
+    try {
+      const db = await openIDB();
+      const cutoff = Date.now() - CONFIG.IDB_TTL_MS;
+      await new Promise((resolve) => {
+        const tx = db.transaction(CONFIG.IDB_STORE, 'readwrite');
+        const idx = tx.objectStore(CONFIG.IDB_STORE).index('storedAt');
+        const req = idx.openCursor(IDBKeyRange.upperBound(cutoff));
+        req.onsuccess = () => {
+          const c = req.result;
+          if (c) { c.delete(); c.continue(); } else resolve();
+        };
+        req.onerror = () => resolve();
+      });
+    } catch {}
+  }
+
+  // ============================================================
+  // UI HELPERS
+  // ============================================================
+  let statusTimer = null;
+  function setStatus(kind, text) {
+    const icons = { idle: 'ℹ️', info: '⏳', success: '✅', error: '❌', warn: '⚠️' };
+    dom.statusMsg.dataset.kind = kind;
+    dom.statusMsg.querySelector('.sb-icon').textContent = icons[kind] || 'ℹ️';
+    dom.statusMsg.querySelector('.sb-text').textContent = text;
+    if (statusTimer) clearTimeout(statusTimer);
+    if (kind === 'success' || kind === 'error' || kind === 'warn') {
+      statusTimer = setTimeout(() => {
+        if (dom.statusMsg.dataset.kind === kind) setStatus('idle', 'Idle — choose a source above.');
+      }, CONFIG.STATUS_TIMEOUT_MS);
+    }
+  }
+  function setProgress(active, percent) {
+    if (!active) {
+      dom.progressBar.dataset.active = 'false';
+      dom.progressBar.classList.remove('indeterminate');
+      return;
+    }
+    dom.progressBar.dataset.active = 'true';
+    if (percent == null) {
+      dom.progressBar.classList.add('indeterminate');
+      dom.progressBar.removeAttribute('aria-valuenow');
+    } else {
+      dom.progressBar.classList.remove('indeterminate');
+      const p = Math.max(0, Math.min(100, percent));
+      dom.progressFill.style.width = p + '%';
+      dom.progressBar.setAttribute('aria-valuenow', String(p));
+    }
+  }
+  function setConn(kind, label) { dom.connPill.dataset.state = kind; dom.connText.textContent = label; }
+  function setBusyText(btn, busy, busyLabel) {
+    if (!btn) return;
+    btn.disabled = busy;
+    const spans = btn.querySelectorAll('span');
+    const label = spans[spans.length - 1];
+    if (!label) return;
+    if (busy) {
+      if (!btn.dataset.origHtml) btn.dataset.origHtml = label.innerHTML;
+      label.textContent = busyLabel || 'Working…';
+    } else if (btn.dataset.origHtml) {
+      label.innerHTML = btn.dataset.origHtml;
+      delete btn.dataset.origHtml;
+    }
+  }
+  function formatSize(bytes) {
+    if (bytes == null || bytes === 0) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1073741824).toFixed(2) + ' GB';
+  }
+  function parseRepoInput(raw) {
+    if (!raw) return null;
+    const clean = String(raw).trim().replace(/\/+$/, '');
+    const m = clean.match(/github\.com\/([^\/\s]+)\/([^\/\s#?]+)/i);
+    if (m) return { owner: m[1], repo: m[2].replace(/\.git$/, '') };
+    const parts = clean.split('/').filter(Boolean);
+    if (parts.length === 2) return { owner: parts[0], repo: parts[1].replace(/\.git$/, '') };
+    return null;
+  }
+  function getIgnorePatterns() {
+    return dom.ignorePatterns.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  }
+  function shouldIgnore(path, patterns) {
+    if (!patterns.length) return false;
+    const p = path.replace(/\\/g, '/').toLowerCase();
+    for (const raw of patterns) {
+      let pat = raw.toLowerCase().replace(/\\/g, '/');
+      let isFolder = raw.endsWith('/');
+      if (pat.endsWith('/')) { pat = pat.slice(0, -1); isFolder = true; }
+      if (!pat) continue;
+      if (pat.includes('*')) {
+        try {
+          const rx = new RegExp('^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+          if (rx.test(p.split('/').pop())) return true;
+        } catch {}
+        continue;
+      }
+      if (isFolder) {
+        if (p.split('/').includes(pat)) return true;
+        if (p.startsWith(pat + '/')) return true;
+      } else {
+        const parts = p.split('/');
+        if (parts[parts.length - 1] === pat) return true;
+        if (parts.includes(pat)) return true;
+      }
+    }
+    return false;
+  }
+  function isBinaryPath(path) {
+    const ext = (path.split('.').pop() || '').toLowerCase();
+    return BINARY_EXT.has(ext);
+  }
+  function isBinaryText(text) {
+    if (!text) return false;
+    const n = Math.min(text.length, 1000);
+    for (let i = 0; i < n; i++) {
+      const c = text.charCodeAt(i);
+      if (c === 0) return true;
+      if (c < 9) return true;
+      if (c > 13 && c < 32) return true;
+    }
+    return false;
+  }
+  function cssEscape(s) {
+    if (window.CSS && CSS.escape) return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+  }
+
+  function sourceLabel() {
+    if (state.sourceType === 'github') {
+      return `${sanitize(state.owner || 'repo')}_${sanitize(state.repo || 'unnamed')}`;
+    }
+    if (state.sourceType === 'local') {
+      const firstPath = state.allFiles[0]?.path || '';
+      const root = firstPath.split('/')[0] || 'folder';
+      return `folder_${sanitize(root)}`;
+    }
+    if (state.sourceType === 'zip') {
+      const zipFile = dom.zipUpload.files && dom.zipUpload.files[0];
+      const name = zipFile ? zipFile.name.replace(/\.zip$/i, '') : 'archive';
+      return `zip_${sanitize(name)}`;
+    }
+    return 'export';
+  }
+  function sanitize(s) { return String(s).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64); }
+  function timestamp() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+  function makeFileName(ext) { return `${sourceLabel()}_${timestamp()}.${ext}`; }
+
+  // ============================================================
+  // TREE MODEL
+  // ============================================================
+  function buildTree(paths, sizes) {
+    const root = { name: '', path: '', type: 'dir', children: new Map(), files: [], totalSize: 0 };
+    for (const p of paths) {
+      const parts = p.split('/');
+      let node = root;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const last = i === parts.length - 1;
+        if (last) {
+          node.files.push({ name: part, path: p, size: sizes.get(p) || 0, type: 'file' });
+        } else {
+          if (!node.children.has(part)) {
+            node.children.set(part, {
+              name: part, path: node.path ? node.path + '/' + part : part,
+              type: 'dir', children: new Map(), files: [], totalSize: 0
+            });
+          }
+          node = node.children.get(part);
+        }
+      }
+    }
+    computeSizes(root);
+    return root;
+  }
+  function computeSizes(node) {
+    let t = 0;
+    for (const f of node.files) t += f.size || 0;
+    for (const c of node.children.values()) t += computeSizes(c);
+    node.totalSize = t;
+    return t;
+  }
+  function walkTree(node, cb) { cb(node); for (const c of node.children.values()) walkTree(c, cb); }
+  function forEachPathIn(node, cb) {
+    for (const f of node.files) cb(f.path);
+    for (const c of node.children.values()) forEachPathIn(c, cb);
+  }
+  function findNode(root, path) {
+    if (!root) return null;
+    if (root.path === path) return root;
+    for (const c of root.children.values()) {
+      const found = findNode(c, path);
+      if (found) return found;
+    }
+    return null;
+  }
+  function folderSelectionState(node) {
+    let all = true, some = false, count = 0;
+    forEachPathIn(node, (p) => {
+      count++;
+      if (state.selectedPaths.has(p)) some = true; else all = false;
+    });
+    return { all: count > 0 && all, some };
+  }
+  function folderSelectedSize(node) {
+    let total = 0;
+    forEachPathIn(node, (p) => {
+      if (state.selectedPaths.has(p)) {
+        const meta = state.allFiles.find(f => f.path === p);
+        if (meta) total += meta.size || 0;
+      }
+    });
+    return total;
+  }
+  function nodeMatches(node, q) {
+    if (node.type === 'file') return node.path.toLowerCase().includes(q);
+    for (const f of node.files) if (f.path.toLowerCase().includes(q)) return true;
+    for (const c of node.children.values()) if (nodeMatches(c, q)) return true;
+    return false;
+  }
+
+  // ============================================================
+  // CONTENT RESOLUTION
+  // ============================================================
+  function shaForPath(path) {
+    const direct = state.pathToSha.get(path);
+    if (direct) return direct;
+    const meta = state.allFiles.find(f => f.path === path);
+    return (meta && meta.sha) ? meta.sha : null;
+  }
+  function getContent(path) {
+    const sha = shaForPath(path);
+    if (sha && state.shaCache.has(sha)) return state.shaCache.get(sha);
+    if (state.fileCache.has(path)) return state.fileCache.get(path);
+    return null;
+  }
+
+  // ============================================================
+  // TREE RENDER
+  // ============================================================
+  function renderTree() {
+    const root = state.treeRoot;
+    if (!root) {
+      dom.treeContainer.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'tree-empty';
+      empty.innerHTML = '<span class="emoji" aria-hidden="true">🌲</span><div>Choose a source above and click <strong>Analyze</strong>.</div>';
+      dom.treeContainer.appendChild(empty);
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    const q = state.filterQuery;
+
+    function visit(node, depth, target) {
+      if (q && node.type === 'dir' && !nodeMatches(node, q)) return;
+
+      const isDir = node.type === 'dir';
+      const row = document.createElement('div');
+      row.className = 'tnode-row' + (isDir ? ' dir' : '');
+      row.dataset.path = node.path;
+      row.dataset.type = node.type;
+      row.style.paddingLeft = (8 + depth * 14) + 'px';
+
+      const toggle = document.createElement('span');
+      toggle.className = 'tnode-toggle';
+      const hasKids = isDir && (node.children.size > 0 || node.files.length > 0);
+      if (hasKids) {
+        const isExpanded = state.expanded.has(node.path) || !!q;
+        toggle.textContent = '▶';
+        toggle.dataset.role = 'toggle';
+        toggle.dataset.path = node.path;
+        toggle.dataset.expanded = String(isExpanded);
+      } else {
+        toggle.classList.add('empty');
+        toggle.textContent = '•';
+      }
+      row.appendChild(toggle);
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'tnode-cb';
+      cb.dataset.path = node.path;
+      cb.dataset.type = node.type;
+      cb.setAttribute('aria-label', (isDir ? 'Folder ' : 'File ') + node.path);
+      if (isDir) {
+        const { all, some } = folderSelectionState(node);
+        if (all) cb.checked = true;
+        else if (some) cb.indeterminate = true;
+      } else {
+        cb.checked = state.selectedPaths.has(node.path);
+      }
+      row.appendChild(cb);
+
+      const icon = document.createElement('span');
+      icon.className = 'tnode-icon';
+      icon.textContent = isDir ? '📁' : '📄';
+      row.appendChild(icon);
+
+      const name = document.createElement('span');
+      name.className = 'tnode-name';
+      name.title = node.path || '';
+      name.textContent = node.name || '(root)';
+      row.appendChild(name);
+
+      if (!isDir && node.size != null) {
+        const s = document.createElement('span');
+        s.className = 'tnode-size';
+        s.textContent = formatSize(node.size);
+        row.appendChild(s);
+      } else if (isDir && node.totalSize) {
+        const s = document.createElement('span');
+        s.className = 'tnode-size';
+        const sel = folderSelectedSize(node);
+        s.textContent = sel > 0
+          ? `${formatSize(sel)} / ${formatSize(node.totalSize)}`
+          : formatSize(node.totalSize);
+        row.appendChild(s);
+      }
+
+      if (!isDir) {
+        const st = document.createElement('span');
+        st.className = 'tnode-status';
+        if (getContent(node.path) != null) st.textContent = '✓';
+        row.appendChild(st);
+      }
+
+      target.appendChild(row);
+
+      if (hasKids) {
+        const expanded = state.expanded.has(node.path) || !!q;
+        const childBox = document.createElement('div');
+        childBox.className = 'tnode-children' + (expanded ? '' : ' collapsed');
+        childBox.dataset.parent = node.path;
+        const sortedDirs = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+        const sortedFiles = [...node.files].sort((a, b) => a.name.localeCompare(b.name));
+        for (const d of sortedDirs) visit(d, depth + 1, childBox);
+        for (const f of sortedFiles) visit(f, depth + 1, childBox);
+        if (childBox.children.length > 0) target.appendChild(childBox);
+      }
+    }
+
+    visit(root, 0, frag);
+    dom.treeContainer.innerHTML = '';
+    dom.treeContainer.appendChild(frag);
+  }
+
+  // ============================================================
+  // SELECTION
+  // ============================================================
+  function onFileToggled(path, checked) {
+    if (checked) state.selectedPaths.add(path); else state.selectedPaths.delete(path);
+    updateSelectionStats();
+  }
+  function onFolderToggled(node, checked) {
+    const paths = [];
+    forEachPathIn(node, p => paths.push(p));
+    if (checked) for (const p of paths) state.selectedPaths.add(p);
+    else for (const p of paths) state.selectedPaths.delete(p);
+    updateSelectionStats();
+  }
+  function updateSelectionStats() {
+    const count = state.selectedPaths.size;
+    let bytes = 0;
+    for (const f of state.allFiles) if (state.selectedPaths.has(f.path)) bytes += f.size || 0;
+    dom.selectionStats.textContent = `${count} selected · ${formatSize(bytes)}`;
+    const cached = state.shaCache.size + state.fileCache.size;
+    dom.cachedCount.textContent = String(cached);
+  }
+
+  dom.treeContainer.addEventListener('click', (e) => {
+    const toggle = e.target.closest('.tnode-toggle');
+    if (toggle && toggle.dataset.role === 'toggle') {
+      e.stopPropagation();
+      const p = toggle.dataset.path;
+      if (state.expanded.has(p)) state.expanded.delete(p); else state.expanded.add(p);
+      renderTree();
+      return;
+    }
+    const name = e.target.closest('.tnode-name');
+    if (name) {
+      const row = name.closest('.tnode-row');
+      if (!row || row.dataset.type !== 'dir') return;
+      const p = row.dataset.path;
+      if (state.expanded.has(p)) state.expanded.delete(p); else state.expanded.add(p);
+      renderTree();
+    }
+  });
+  dom.treeContainer.addEventListener('change', (e) => {
+    const cb = e.target.closest('.tnode-cb');
+    if (!cb) return;
+    const p = cb.dataset.path;
+    const t = cb.dataset.type;
+    if (t === 'file') onFileToggled(p, cb.checked);
+    else {
+      const node = findNode(state.treeRoot, p);
+      if (node) onFolderToggled(node, cb.checked);
+    }
+    renderTree();
+  });
+
+  let searchTimer = null;
+  dom.treeSearch.addEventListener('input', () => {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.filterQuery = dom.treeSearch.value.trim().toLowerCase();
+      renderTree();
+    }, CONFIG.SEARCH_DEBOUNCE_MS);
+  });
+
+  dom.expandAllBtn.addEventListener('click', () => {
+    if (!state.treeRoot) return;
+    walkTree(state.treeRoot, (n) => { if (n.type === 'dir' && n.path) state.expanded.add(n.path); });
+    renderTree();
+  });
+  dom.collapseAllBtn.addEventListener('click', () => { state.expanded.clear(); renderTree(); });
+
+  // ============================================================
+  // FORMATTING
+  // ============================================================
+  function stripComments(code, filePath) {
+    const ext = (filePath.split('.').pop() || '').toLowerCase();
+    try {
+      if (['js','jsx','ts','tsx','mjs','cjs'].includes(ext))
+        return code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (ext === 'py')
+        return code.replace(/#.*$/gm, '').replace(/'''[\s\S]*?'''/g, '').replace(/"""[\s\S]*?"""/g, '');
+      if (['html','xml','svg'].includes(ext))
+        return code.replace(/<!--[\s\S]*?-->/g, '');
+      if (['css','scss','sass','less'].includes(ext))
+        return code.replace(/\/\*[\s\S]*?\*\//g, '');
+      if (['c','cpp','h','hpp','cc','cxx','java','go','rs','cs','swift','kt','kts'].includes(ext))
+        return code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (ext === 'rb') return code.replace(/#.*$/gm, '').replace(/=begin[\s\S]*?=end/g, '');
+      if (ext === 'php') return code.replace(/\/\/.*$/gm, '').replace(/#.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (ext === 'sql') return code.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (['sh','bash','zsh','fish'].includes(ext)) return code.replace(/#.*$/gm, '');
+      if (ext === 'lua') return code.replace(/--.*$/gm, '').replace(/--\[\[[\s\S]*?\]\]/g, '');
+    } catch {}
+    return code;
+  }
+  function buildAsciiTree(paths, sizes) {
+    if (!paths.length) return '(empty)';
+    const root = {};
+    for (const p of paths) {
+      const parts = p.split('/');
+      let n = root;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (i === parts.length - 1) (n._f = n._f || []).push({ name: part, size: sizes.get(p) || 0 });
+        else n = (n[part] = n[part] || {});
+      }
+    }
+    const fmt = b => !b ? '' : b < 1024 ? ` (${b} B)` : b < 1048576 ? ` (${(b/1024).toFixed(1)} KB)` : ` (${(b/1048576).toFixed(1)} MB)`;
+    function render(node, prefix) {
+      const dirs = Object.keys(node).filter(k => k !== '_f').sort();
+      const files = (node._f || []).sort((a, b) => a.name.localeCompare(b.name));
+      const items = [...dirs.map(d => ({ type: 'dir', name: d })), ...files.map(f => ({ type: 'file', name: f.name, size: f.size }))];
+      const lines = [];
+      items.forEach((it, i) => {
+        const last = i === items.length - 1;
+        const conn = last ? '└── ' : '├── ';
+        lines.push(`${prefix}${conn}${it.name}${it.type === 'dir' ? '/' : ''}${it.size ? fmt(it.size) : ''}`);
+        if (it.type === 'dir') lines.push(render(node[it.name], prefix + (last ? '    ' : '│   ')));
+      });
+      return lines.filter(Boolean).join('\n');
+    }
+    const rd = Object.keys(root).filter(k => k !== '_f').sort();
+    const rf = (root._f || []).sort((a, b) => a.name.localeCompare(b.name));
+    const items = [...rd.map(d => ({ type: 'dir', name: d })), ...rf.map(f => ({ type: 'file', name: f.name }))];
+    const out = [];
+    items.forEach((it, i) => {
+      const last = i === items.length - 1;
+      out.push(`${last ? '└── ' : '├── '}${it.name}${it.type === 'dir' ? '/' : ''}`);
+      if (it.type === 'dir') out.push(render(root[it.name], last ? '    ' : '│   '));
+    });
+    return out.join('\n');
+  }
+  function renderSection(path) {
+    const content = getContent(path);
+    const body = content == null ? '[Not fetched: ' + path + ']' : content;
+    let c = body;
+    if (dom.removeComments.checked) c = stripComments(c, path);
+    if (dom.removeEmpty.checked) c = c.split('\n').filter(l => l.trim()).join('\n');
+    if (dom.showLineNums.checked) {
+      const arr = c.split('\n');
+      const w = String(arr.length).length;
+      c = arr.map((l, i) => String(i + 1).padStart(w, ' ') + ' | ' + l).join('\n');
+    }
+    return '\n' + '#'.repeat(80) + '\nFile: ' + path + '\n' + '#'.repeat(80) + '\n\n' + c;
+  }
+  function buildPreviewText() {
+    const b = state.previewBuild;
+    if (!b) return '';
+    const parts = [b.header];
+    for (const p of b.order) if (b.chunks.has(p)) parts.push(b.chunks.get(p));
+    parts.push('\n' + '#'.repeat(80) + '\nEND OF CODEBASE\n' + '#'.repeat(80) + '\n');
+    return parts.join('\n');
+  }
+
+  // ============================================================
+  // GITHUB FLOW
+  // ============================================================
+  async function analyzeGitHub() {
+    if (state.busy) return;
+    const parsed = parseRepoInput(dom.repoUrl.value);
+    if (!parsed) {
+      setStatus('error', 'Invalid format. Use owner/repo or a full GitHub URL.');
+      dom.repoUrl.focus();
+      return;
+    }
+    state.owner = parsed.owner;
+    state.repo = parsed.repo;
+    state.branch = 'main';
+
+    resetRepoUI();
+    setBusyText(dom.analyzeBtn, true, 'Analyzing…');
+    setProgress(true, null);
+    setStatus('info', 'Connecting…');
+    state.busy = true;
+
+    try {
+      // Register the tree waiter BEFORE any send, so we cannot miss the frame.
+      const treePromise = waitFor(m => m.type === 'tree', 'tree', CONFIG.TREE_WAIT_MS);
+
+      await openWS();
+      wsSend({
+        type: 'set-repo',
+        owner: state.owner,
+        repo: state.repo,
+        branch: state.branch,
+        ignorePatterns: getIgnorePatterns()
+      });
+
+      setStatus('info', 'Waiting for tree…');
+      const treeMsg = await treePromise;
+      applyTree(treeMsg.files || []);
+    } catch (e) {
+      err('Analyze failed:', e);
+      setStatus('error', 'Analyze failed: ' + e.message);
+      setProgress(false);
+    } finally {
+      setBusyText(dom.analyzeBtn, false);
+      state.busy = false;
+    }
+  }
+
+  function applyTree(files) {
+    if (!files.length) { setStatus('warn', 'Backend returned an empty tree.'); return; }
+
+    state.allFiles = files.map(f => ({ path: f.path, size: f.size || 0, sha: f.sha }));
+    state.pathToSha.clear();
+    for (const f of files) if (f.sha) state.pathToSha.set(f.path, f.sha);
+
+    const sizes = new Map(state.allFiles.map(f => [f.path, f.size]));
+    state.treeRoot = buildTree(state.allFiles.map(f => f.path), sizes);
+    state.expanded.clear();
+    state.expanded.add('');
+    state.selectedPaths.clear();
+    for (const f of state.allFiles) state.selectedPaths.add(f.path);
+
+    let bytes = 0;
+    for (const f of state.allFiles) bytes += f.size;
+    dom.totalFiles.textContent = String(state.allFiles.length);
+    dom.totalSize.textContent = formatSize(bytes);
+    dom.analysisDetails.textContent = `${files.length} files · ${state.branch} · repo #${state.repoId ?? '—'}`;
+
+    renderTree();
+    updateSelectionStats();
+    dom.previewBtn.disabled = false;
+    dom.downloadZipBtn.disabled = false;
+    setProgress(false);
+    setStatus('success', `Loaded ${files.length} files. Click Preview to fetch content.`);
+  }
+
+  // ============================================================
+  // FETCH
+  // ============================================================
+  async function fetchShasForPaths(paths) {
+    const wanted = [];
+    const seen = new Set();
+    for (const p of paths) {
+      if (state.fileCache.has(p)) continue;
+      const sha = shaForPath(p);
+      if (!sha) continue;
+      if (state.shaCache.has(sha)) continue;
+      if (seen.has(sha)) continue;
+      seen.add(sha);
+      wanted.push(sha);
+    }
+    if (wanted.length === 0) { log('fetch: nothing missing'); return { requested: 0, sent: 0, skipped: 0 }; }
+
+    log('fetch: sending', wanted.length, 'shas');
+    setStatus('info', `Fetching ${wanted.length} file(s)…`);
+    const donePromise = waitFor(m => m.type === 'fetch-complete', 'fetch-complete', CONFIG.FETCH_WAIT_MS);
+    wsSend({ type: 'fetch', shas: wanted });
+    const done = await donePromise;
+    log('fetch: complete', done);
+    return done;
+  }
+
+  // ============================================================
+  // PREVIEW
+  // ============================================================
+  async function generatePreview() {
+    if (state.busy) return;
+    if (state.selectedPaths.size === 0) { setStatus('warn', 'No files selected.'); return; }
+    state.busy = true;
+    setBusyText(dom.previewBtn, true, 'Preparing…');
+    setProgress(true, null);
+    try {
+      const sortedPaths = [...state.selectedPaths].sort();
+      const sizes = new Map();
+      let total = 0;
+      for (const p of sortedPaths) {
+        const meta = state.allFiles.find(f => f.path === p);
+        const len = meta?.size || 0;
+        sizes.set(p, len);
+        total += len;
+      }
+      const header = [];
+      header.push('#'.repeat(80));
+      header.push('REPOMIX EXPORT');
+      header.push('Source: ' + sourceLabel());
+      header.push('Generated: ' + new Date().toISOString());
+      header.push('Files: ' + sortedPaths.length);
+      header.push('Size (metadata): ' + (total / 1024).toFixed(1) + ' KB');
+      header.push('#'.repeat(80));
+      header.push('');
+      if (dom.includeDir.checked) {
+        header.push('DIRECTORY STRUCTURE');
+        header.push('-'.repeat(80));
+        header.push(buildAsciiTree(sortedPaths, sizes));
+        header.push('');
+        header.push('#'.repeat(80));
+        header.push('');
+      }
+      state.previewBuild = { order: sortedPaths, header: header.join('\n'), chunks: new Map() };
+      for (const p of sortedPaths) {
+        if (getContent(p) != null) state.previewBuild.chunks.set(p, renderSection(p));
+      }
+      const initial = buildPreviewText();
+      state.currentText = initial;
+      dom.output.textContent = initial;
+      dom.outputCard.classList.remove('hidden');
+
+      await fetchShasForPaths(sortedPaths);
+      const finalText = buildPreviewText();
+      state.currentText = finalText;
+      dom.output.textContent = finalText;
+      setStatus('success', `Preview ready — ${sortedPaths.length} files.`);
+      setProgress(false);
+    } catch (e) {
+      err('Preview failed:', e);
+      setStatus('error', 'Preview failed: ' + e.message);
+      setProgress(false);
+    } finally {
+      setBusyText(dom.previewBtn, false);
+      state.busy = false;
+    }
+  }
+
+  // ============================================================
+  // DOWNLOAD ZIP
+  // ============================================================
+  async function downloadZip() {
+    if (state.busy) return;
+    if (state.selectedPaths.size === 0) { setStatus('warn', 'No files selected.'); return; }
+    if (!window.RepomixZip) { setStatus('error', 'Streaming ZIP writer not loaded.'); return; }
+    state.busy = true;
+    setBusyText(dom.downloadZipBtn, true, 'Preparing…');
+    setProgress(true, 0);
+    try {
+      const sortedPaths = [...state.selectedPaths].sort();
+      await fetchShasForPaths(sortedPaths);
+      setBusyText(dom.downloadZipBtn, true, 'Streaming…');
+      const zip = window.RepomixZip.createStreamingZip({ onProgress: (pct) => setProgress(true, pct) });
+      for (let i = 0; i < sortedPaths.length; i++) {
+        const p = sortedPaths[i];
+        let content = getContent(p);
+        if (content == null) content = '';
+        if (dom.removeComments.checked) content = stripComments(content, p);
+        if (dom.removeEmpty.checked) content = content.split('\n').filter(l => l.trim()).join('\n');
+        await zip.addFile(p, content);
+      }
+      if (dom.includeDir.checked) {
+        const sizes = new Map(sortedPaths.map(p => [p, (getContent(p) || '').length]));
+        const tree = 'Directory Structure:\n' + '-'.repeat(80) + '\n' + buildAsciiTree(sortedPaths, sizes);
+        await zip.addFile('_directory_structure.txt', tree);
+      }
+      const blob = await zip.finish();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = makeFileName('zip');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      setStatus('success', `Downloaded — ${formatSize(blob.size)}.`);
+    } catch (e) {
+      err('ZIP failed:', e);
+      setStatus('error', 'ZIP failed: ' + e.message);
+    } finally {
+      setProgress(false);
+      setBusyText(dom.downloadZipBtn, false);
+      state.busy = false;
+    }
+  }
+
+  // ============================================================
+  // LOCAL FOLDER
+  // ============================================================
+  async function loadLocalFolderTree() {
+    if (state.busy) return;
+    const files = Array.from(dom.folderPicker.files || []);
+    if (!files.length) { setStatus('warn', 'No folder selected.'); return; }
+    state.busy = true;
+    setBusyText(dom.analyzeFolderBtn, true, 'Reading…');
+    setProgress(true, 20);
+    setStatus('info', `Enumerating ${files.length} entries…`);
+    try {
+      await new Promise(r => setTimeout(r, 16));
+      const patterns = getIgnorePatterns();
+      const handles = new Map();
+      const paths = [];
+      const sizes = new Map();
+      let totalBytes = 0, skipped = 0;
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const rel = (f.webkitRelativePath || f.name || '').replace(/\\/g, '/');
+        if (!rel) continue;
+        if (shouldIgnore(rel, patterns)) { skipped++; continue; }
+        if (isBinaryPath(rel)) { skipped++; continue; }
+        paths.push(rel);
+        sizes.set(rel, f.size || 0);
+        handles.set(rel, f);
+        totalBytes += f.size || 0;
+        if (i % 5000 === 0 && i > 0) await new Promise(r => setTimeout(r, 0));
+      }
+      if (!paths.length) { setStatus('warn', 'No text files matched the ignore rules.'); setProgress(false); return; }
+      state.localHandles = handles;
+      state.localZipEntries = new Map();
+      state.fileCache.clear();
+      state.allFiles = paths.map(p => ({ path: p, size: sizes.get(p) }));
+      state.pathToSha.clear();
+      state.treeRoot = buildTree(paths, sizes);
+      state.selectedPaths.clear();
+      for (const p of paths) state.selectedPaths.add(p);
+      state.expanded.clear();
+      state.expanded.add('');
+      state.filterQuery = '';
+      dom.treeSearch.value = '';
+      dom.totalFiles.textContent = String(paths.length);
+      dom.totalSize.textContent = formatSize(totalBytes);
+      dom.analysisDetails.textContent = `${paths.length} files · ${skipped} skipped · metadata only`;
+      renderTree();
+      updateSelectionStats();
+      dom.previewBtn.disabled = false;
+      dom.downloadZipBtn.disabled = false;
+      dom.outputCard.classList.add('hidden');
+      setProgress(false);
+      setStatus('success', `Ready — ${paths.length} files.`);
+    } catch (e) {
+      err('Folder read failed:', e);
+      setStatus('error', 'Failed to read folder: ' + e.message);
+      setProgress(false);
+    } finally {
+      setBusyText(dom.analyzeFolderBtn, false);
+      state.busy = false;
+    }
+  }
+
+  async function loadLocalPaths(paths) {
+    const BATCH = 25;
+    for (let i = 0; i < paths.length; i += BATCH) {
+      const batch = paths.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (p) => {
+        if (state.fileCache.has(p)) return;
+        const h = state.localHandles.get(p);
+        const e = state.localZipEntries.get(p);
+        try {
+          let text = null;
+          if (h && typeof h.text === 'function') text = await h.text();
+          else if (e && typeof e.async === 'function') text = await e.async('string');
+          if (text != null && !isBinaryText(text)) {
+            state.fileCache.set(p, text);
+            if (state.previewBuild && state.previewBuild.order.includes(p) && !state.previewBuild.chunks.has(p)) {
+              state.previewBuild.chunks.set(p, renderSection(p));
+            }
+            const row = dom.treeContainer.querySelector(`.tnode-row[data-path="${cssEscape(p)}"]`);
+            const st = row?.querySelector('.tnode-status');
+            if (st) st.textContent = '✓';
+          }
+        } catch (err2) { warn('Read failed:', p, err2); }
+      }));
+      await new Promise(r => setTimeout(r, 0));
+    }
+    updateSelectionStats();
+  }
+
+  // ============================================================
+  // LOCAL ZIP
+  // ============================================================
+  async function loadZipTree() {
+    if (state.busy) return;
+    const zipFile = dom.zipUpload.files && dom.zipUpload.files[0];
+    if (!zipFile) { setStatus('warn', 'No ZIP selected.'); return; }
+    if (!state.jszipAvailable) { setStatus('error', 'ZIP support requires JSZip.'); return; }
+    state.busy = true;
+    setBusyText(dom.analyzeZipBtn, true, 'Indexing…');
+    setProgress(true, 30);
+    setStatus('info', 'Reading ZIP central directory…');
+    try {
+      await new Promise(r => setTimeout(r, 16));
+      const zip = await JSZip.loadAsync(zipFile, { createFolders: false });
+      const patterns = getIgnorePatterns();
+      const entries = new Map();
+      const paths = [];
+      const sizes = new Map();
+      let totalBytes = 0, skipped = 0;
+      zip.forEach((relPath, entry) => {
+        if (entry.dir) return;
+        if (shouldIgnore(relPath, patterns)) { skipped++; return; }
+        if (isBinaryPath(relPath)) { skipped++; return; }
+        const size = entry?._data?.uncompressedSize ?? 0;
+        paths.push(relPath);
+        sizes.set(relPath, size);
+        entries.set(relPath, entry);
+        totalBytes += size;
+      });
+      if (!paths.length) { setStatus('warn', 'No text files.'); setProgress(false); return; }
+      state.localZipEntries = entries;
+      state.localHandles = new Map();
+      state.fileCache.clear();
+      state.allFiles = paths.map(p => ({ path: p, size: sizes.get(p) }));
+      state.pathToSha.clear();
+      state.treeRoot = buildTree(paths, sizes);
+      state.selectedPaths.clear();
+      for (const p of paths) state.selectedPaths.add(p);
+      state.expanded.clear();
+      state.expanded.add('');
+      state.filterQuery = '';
+      dom.treeSearch.value = '';
+      dom.totalFiles.textContent = String(paths.length);
+      dom.totalSize.textContent = formatSize(totalBytes);
+      dom.analysisDetails.textContent = `${paths.length} files · ${skipped} skipped`;
+      renderTree();
+      updateSelectionStats();
+      dom.previewBtn.disabled = false;
+      dom.downloadZipBtn.disabled = false;
+      dom.outputCard.classList.add('hidden');
+      setProgress(false);
+      setStatus('success', `Ready — ${paths.length} files.`);
+    } catch (e) {
+      err('ZIP error:', e);
+      setStatus('error', 'ZIP error: ' + e.message);
+      setProgress(false);
+    } finally {
+      setBusyText(dom.analyzeZipBtn, false);
+      state.busy = false;
+    }
+  }
+
+  // ============================================================
+  // RESET / TABS / WIRING
+  // ============================================================
+  function resetRepoUI() {
+    state.selectedPaths.clear();
+    state.allFiles = [];
+    state.treeRoot = null;
+    state.pathToSha.clear();
+    state.expanded.clear();
+    state.filterQuery = '';
+    state.localHandles.clear();
+    state.localZipEntries.clear();
+    state.fileCache.clear();
+    state.chunkBuffers.clear();
+    state.currentText = '';
+    state.previewBuild = null;
+    dom.treeSearch.value = '';
+    dom.totalFiles.textContent = '0';
+    dom.totalSize.textContent = '0 B';
+    dom.analysisDetails.textContent = '';
+    dom.output.textContent = '—';
+    dom.outputCard.classList.add('hidden');
+    dom.previewBtn.disabled = true;
+    dom.downloadZipBtn.disabled = true;
+    setProgress(false);
+    renderTree();
+    updateSelectionStats();
+  }
+  function resetAll() { resetRepoUI(); setStatus('idle', 'Idle — choose a source above.'); }
+  dom.resetBtn.addEventListener('click', resetAll);
+
+  function setSourceType(type) {
+    state.sourceType = type;
+    for (const t of dom.tabs) t.setAttribute('aria-selected', String(t.dataset.source === type));
+    dom.panelGithub.classList.toggle('hidden', type !== 'github');
+    dom.panelLocal.classList.toggle('hidden', type !== 'local');
+    dom.panelZip.classList.toggle('hidden', type !== 'zip');
+  }
+  for (const t of dom.tabs) t.addEventListener('click', () => setSourceType(t.dataset.source));
+
+  dom.analyzeBtn.addEventListener('click', analyzeGitHub);
+  dom.analyzeFolderBtn.addEventListener('click', loadLocalFolderTree);
+  dom.analyzeZipBtn.addEventListener('click', loadZipTree);
+  dom.previewBtn.addEventListener('click', generatePreview);
+  dom.downloadZipBtn.addEventListener('click', downloadZip);
+  dom.repoUrl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); dom.analyzeBtn.click(); }
+  });
+
+  dom.folderPicker.addEventListener('change', () => {
+    const n = (dom.folderPicker.files && dom.folderPicker.files.length) || 0;
+    if (n > 0) {
+      dom.folderDrop.classList.add('has-file');
+      dom.folderLabel.textContent = `📂 ${n} entries selected`;
+      setSourceType('local');
+      loadLocalFolderTree();
+    }
+  });
+  dom.zipUpload.addEventListener('change', () => {
+    const f = dom.zipUpload.files && dom.zipUpload.files[0];
+    if (f) {
+      dom.zipDrop.classList.add('has-file');
+      dom.zipLabel.textContent = `🗜️ ${f.name} (${formatSize(f.size)})`;
+      setSourceType('zip');
+      loadZipTree();
+    }
+  });
+  ['dragenter','dragover'].forEach(evt => dom.zipDrop.addEventListener(evt, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dom.zipDrop.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(evt => dom.zipDrop.addEventListener(evt, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dom.zipDrop.classList.remove('dragover');
+  }));
+  dom.zipDrop.addEventListener('drop', (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      dom.zipUpload.files = dt.files;
+      dom.zipUpload.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch {
+      dom.zipDrop.classList.add('has-file');
+      dom.zipLabel.textContent = `🗜️ ${f.name}`;
+      setSourceType('zip');
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        dom.zipUpload.files = dt.files;
+      } catch {}
+      loadZipTree();
+    }
+  });
+
+  dom.downloadTextBtn.addEventListener('click', () => {
+    if (!state.currentText) { setStatus('warn', 'Nothing to download.'); return; }
+    const blob = new Blob([state.currentText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = makeFileName('txt');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    setStatus('success', `Saved — ${formatSize(blob.size)}.`);
+  });
+  dom.copyBtn.addEventListener('click', async () => {
+    if (!state.currentText) return;
+    try {
+      await navigator.clipboard.writeText(state.currentText);
+      dom.copyBtn.textContent = '✅ Copied';
+      setTimeout(() => { dom.copyBtn.textContent = '📋 Copy'; }, 1800);
+    } catch {
+      setStatus('error', 'Clipboard unavailable.');
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      dom.treeSearch.focus();
+      dom.treeSearch.select();
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pingHealth().catch(() => {});
+  });
+
+  // ============================================================
+  // BOOT
+  // ============================================================
+  async function boot() {
+    state.jszipAvailable = (typeof JSZip !== 'undefined' && JSZip && typeof JSZip.loadAsync === 'function');
+    dom.ignorePatterns.value = DEFAULT_IGNORE;
+    setSourceType('github');
+    try {
+      await openIDB();
+      idbPrune();
+      const rows = await idbGetAll();
+      for (const r of rows) if (r && r.sha && r.content != null) state.shaCache.set(r.sha, r.content);
+      if (rows.length) log(`💾 Hydrated ${rows.length} cached blobs from IndexedDB`);
+      updateSelectionStats();
+    } catch (e) {
+      warn('IndexedDB unavailable:', e.message);
+    }
+    setStatus('idle', 'Idle — choose a source above.');
+    startHealthPolling();
+    console.log('%c🚀 Repomix ready', 'color:#8b5cf6; font-weight:bold');
+    console.log('   testapi()          → probe all GitHub token rate limits');
+    console.log('   repomix.info()     → state snapshot');
+    console.log('   repomix.debug(true)→ verbose WS logging');
+    console.log('   repomix.reset()');
+  }
+
+  Object.defineProperty(window, 'repomix', {
+    value: Object.freeze({
+      info: () => ({
+        jszip: state.jszipAvailable,
+        streamingZip: !!window.RepomixZip,
+        shaCache: state.shaCache.size,
+        fileCache: state.fileCache.size,
+        selected: state.selectedPaths.size,
+        source: state.sourceType,
+        backendHttp: BACKEND_HTTP,
+        backendWs: BACKEND_WS,
+        wsReady: state.wsReady,
+        owner: state.owner, repo: state.repo, branch: state.branch,
+        sourceLabel: sourceLabel()
+      }),
+      health: () => pingHealth().then(d => { console.log(d); return d; }).catch(() => {}),
+      debug: (on) => {
+        DEBUG = !!on;
+        try { localStorage.setItem('repomix_debug', on ? '1' : '0'); } catch {}
+        console.log('Debug', on ? 'ON' : 'OFF');
+      },
+      clearCache: async () => {
+        state.shaCache.clear();
+        state.fileCache.clear();
+        await idbClear();
+        updateSelectionStats();
+        renderTree();
+      },
+      reset: resetAll
+    }),
+    writable: false, configurable: false
+  });
+  Object.defineProperty(window, 'testapi', {
+    value: testapi, writable: false, configurable: false
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
